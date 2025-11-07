@@ -10,8 +10,9 @@ import AVPacket from '@libmedia/avutil/struct/avpacket';
 import structAccess from '@libmedia/cheap/std/structAccess';
 import { mapUint8Array } from '@libmedia/cheap/std/memory';
 import { WebcodecPlayer, detectKeyframe } from '../webcodec-player';
+import { SpeedControl } from '../webcodec-player/speed-control';
 
-export interface DemuxStats {
+export interface VideoDemuxDecoderStats {
   videoCodecName: string;
   codecType: 'h264' | 'h265';
   width: number;
@@ -23,18 +24,18 @@ export interface DemuxStats {
   videoStreamIndex: number;
 }
 
-export interface DemuxOptions {
+export interface VideoDemuxDecoderOptions {
   source: string;
   videoEl?: HTMLVideoElement;
-  onProgress?: (stats: Partial<DemuxStats>) => void;
+  onProgress?: (stats: Partial<VideoDemuxDecoderStats>) => void;
 }
 
-export function useFileDemux() {
-  const stats: Ref<DemuxStats | null> = ref(null);
+export function useVideoDemuxDecoder() {
+  const stats: Ref<VideoDemuxDecoderStats | null> = ref(null);
   const isLoading = ref(false);
   const error = ref<Error | null>(null);
 
-  async function demuxFile(options: DemuxOptions) {
+  async function processVideoFile(options: VideoDemuxDecoderOptions) {
     isLoading.value = true;
     error.value = null;
     
@@ -179,6 +180,10 @@ export function useFileDemux() {
         throw new Error('无法获取视频流信息');
       }
 
+      // 立即保存视频流的宽高信息，避免后续 iformatContext.destroy() 后无法访问
+      const videoWidth = videoStream.codecpar.width || 0;
+      const videoHeight = videoStream.codecpar.height || 0;
+
       const codecType = videoCodecName.toLowerCase() === 'h264' ? 'h264' : 'h265';
       
       // 如果没有提供 videoEl，创建一个临时的 video 元素用于解码
@@ -186,12 +191,12 @@ export function useFileDemux() {
       
       const player = new WebcodecPlayer({
         codec: codecType,
-        width: videoStream.codecpar.width || 1920,
-        height: videoStream.codecpar.height || 1080,
+        width: videoWidth || 1920,
+        height: videoHeight || 1080,
         videoEl: targetVideoEl,
       });
 
-      console.log(`\n创建 WebcodecPlayer: ${videoCodecName}, ${videoStream.codecpar.width}x${videoStream.codecpar.height}`);
+      console.log(`\n创建 WebcodecPlayer: ${videoCodecName}, ${videoWidth}x${videoHeight}`);
       console.log(`编码类型: ${codecType}`);
       console.log(`AVPacketFlags.AV_PKT_FLAG_KEY = ${AVPacketFlags.AV_PKT_FLAG_KEY}`);
 
@@ -199,8 +204,17 @@ export function useFileDemux() {
       let keyframeCount = 0;
       let videoPacketCount = 0;
 
+      // 缓存所有视频帧数据
+      interface VideoFrameData {
+        data: Uint8Array;
+        isKeyframe: boolean;
+        packetIndex: number;
+      }
+      const videoFrameCache: VideoFrameData[] = [];
+
       console.log('\n=== 开始读取数据包 ===\n');
 
+      // 第一步：读取所有数据包并缓存视频帧
       while (1) {
         let ret = await demux.readAVPacket(iformatContext, avpacket);
         if (ret !== 0) {
@@ -237,11 +251,11 @@ export function useFileDemux() {
           }
 
           // 显示详细的包信息来调试关键帧检测
-          if (videoPacketCount <= 100) {
-            const streamType = isVideoPacket ? 'VIDEO' : 'AUDIO';
-            const keyframeInfo = isKeyframe ? '🔑 KEYFRAME' : '';
-            // console.log(`[${streamType}] packet #${videoPacketCount}, flags: ${pkt.flags}, size: ${pkt.size}, dts: ${pkt.dts}, pts: ${pkt.pts} ${keyframeInfo}`);
-          }
+          // if (videoPacketCount <= 100) {
+          //   const streamType = isVideoPacket ? 'VIDEO' : 'AUDIO';
+          //   const keyframeInfo = isKeyframe ? '🔑 KEYFRAME' : '';
+          //   console.log(`[${streamType}] packet #${videoPacketCount}, flags: ${pkt.flags}, size: ${pkt.size}, dts: ${pkt.dts}, pts: ${pkt.pts} ${keyframeInfo}`);
+          // }
 
           // 进度回调
           if (onProgress && videoPacketCount % 100 === 0) {
@@ -251,35 +265,35 @@ export function useFileDemux() {
               totalPackets: packetCount,
             });
           }
-        }
 
-        // 如果是视频包，使用 WebcodecPlayer 解码
-        if (isVideoPacket && pkt.data && pkt.size > 0) {
-          try {
-            // 将 AVPacket 的数据转换为 Uint8Array
+          // 缓存视频帧数据（复制数据，因为 AVPacket 会被重用）
+          if (pkt.data && pkt.size > 0) {
             const videoData = mapUint8Array(pkt.data, pkt.size);
-
-            // 解码视频帧
-            player.decode(videoData, isKeyframe);
-
-            if (videoPacketCount <= 99999 || isKeyframe) {
-              // console.log(`✅ 解码视频帧 #${videoPacketCount}, size: ${pkt.size}, ${isKeyframe ? '关键帧' : '普通帧'}`);
-            }
-          } catch (err) {
-            console.error(`❌ 解码视频帧失败 #${videoPacketCount}:`, err);
+            // 创建数据副本
+            const dataCopy = new Uint8Array(videoData.length);
+            dataCopy.set(videoData);
+            
+            videoFrameCache.push({
+              data: dataCopy,
+              isKeyframe,
+              packetIndex: videoPacketCount,
+            });
           }
         }
       }
 
-      // 清理资源
-      player.destroy();
+      console.log(`\n=== 数据包读取完成 ===`);
+      console.log(`总数据包数: ${packetCount}`);
+      console.log(`视频数据包数: ${videoPacketCount}`);
+      console.log(`缓存的视频帧数: ${videoFrameCache.length}`);
+      console.log(`关键帧数量: ${keyframeCount}`);
 
-      // 计算统计信息
-      const demuxStats: DemuxStats = {
+      // 解封装完成后立即计算并显示统计信息
+      const demuxStats: VideoDemuxDecoderStats = {
         videoCodecName,
         codecType,
-        width: videoStream.codecpar.width || 0,
-        height: videoStream.codecpar.height || 0,
+        width: videoWidth,
+        height: videoHeight,
         totalPackets: packetCount,
         videoPackets: videoPacketCount,
         keyframes: keyframeCount,
@@ -287,9 +301,13 @@ export function useFileDemux() {
         videoStreamIndex,
       };
 
+      // 更新统计信息，让 UI 立即显示
       stats.value = demuxStats;
+      
+      // 解封装完成，设置加载状态为 false，让 UI 显示统计信息
+      isLoading.value = false;
 
-      console.log(`\n=== 统计信息 ===`);
+      console.log(`\n=== 解封装统计信息 ===`);
       console.log(`视频编码格式: ${videoCodecName}`);
       console.log(`分辨率: ${demuxStats.width}x${demuxStats.height}`);
       console.log(`总数据包数: ${packetCount}`);
@@ -297,10 +315,71 @@ export function useFileDemux() {
       console.log(`关键帧数量: ${keyframeCount}`);
       console.log(`关键帧比例: ${demuxStats.keyframeRatio.toFixed(2)}%`);
 
-      isLoading.value = false;
+      // 第二步：使用 SpeedControl 控制解码速度（后台异步进行）
+      console.log(`\n=== 开始解码视频帧 ===\n`);
+      
+      let decodedFrameCount = 0;
+      
+      // 创建 SpeedControl 实例来控制解码速度
+      const speedControl = new SpeedControl((encodedChunk: any) => {
+        // SpeedControl 消费回调：执行实际的解码操作
+        const frameData = encodedChunk as VideoFrameData;
+        try {
+          player.decode(frameData.data, frameData.isKeyframe);
+          decodedFrameCount++;
+          
+          if (decodedFrameCount <= 100 || frameData.isKeyframe) {
+            console.log(`✅ 解码视频帧 #${frameData.packetIndex}, size: ${frameData.data.length}, ${frameData.isKeyframe ? '关键帧' : '普通帧'}`);
+          }
+        } catch (err) {
+          console.error(`❌ 解码视频帧失败 #${frameData.packetIndex}:`, err);
+        }
+      });
+
+      // 将所有缓存的视频帧添加到 SpeedControl 队列
+      console.log(`正在将 ${videoFrameCache.length} 个视频帧添加到 SpeedControl 队列...`);
+      for (const frameData of videoFrameCache) {
+        // 将帧数据作为 EncodedVideoChunk 添加到队列
+        // SpeedControl 会按照设定的速度（40ms/帧）自动消费
+        speedControl.addEncodeVideoChunk(frameData as any);
+      }
+
+      // 等待所有帧解码完成
+      // 计算预期的总时间：帧数 * 40ms
+      const expectedDuration = videoFrameCache.length * 40;
+      console.log(`预计解码时间: ${(expectedDuration / 1000).toFixed(2)} 秒`);
+      
+      // 等待解码完成（留一些余量）
+      await new Promise<void>((resolve) => {
+        const checkInterval = setInterval(() => {
+          const queueSize = speedControl.getQueueSize();
+          console.log(`解码进度: ${decodedFrameCount}/${videoFrameCache.length}, 队列剩余: ${queueSize}`);
+          
+          // 当队列为空且所有帧都已解码时，完成
+          if (queueSize === 0 && decodedFrameCount >= videoFrameCache.length) {
+            clearInterval(checkInterval);
+            resolve();
+          }
+        }, 1000); // 每秒检查一次进度
+        
+        // 设置超时保护（最多等待预期时间的2倍）
+        setTimeout(() => {
+          clearInterval(checkInterval);
+          resolve();
+        }, expectedDuration * 2 + 5000);
+      });
+
+      console.log(`\n=== 解码完成 ===`);
+      console.log(`已解码帧数: ${decodedFrameCount}/${videoFrameCache.length}`);
+
+      // 清理资源
+      speedControl.destroy();
+      player.destroy();
+
+      // 统计信息已在解封装完成后更新，这里直接返回
       return demuxStats;
     } catch (err) {
-      console.error('解封装过程出错:', err);
+      console.error('解封装和解码过程出错:', err);
       error.value = err as Error;
       isLoading.value = false;
       throw err;
@@ -308,9 +387,10 @@ export function useFileDemux() {
   }
 
   return {
-    demuxFile,
+    processVideoFile,
     stats,
     isLoading,
     error,
   };
 }
+

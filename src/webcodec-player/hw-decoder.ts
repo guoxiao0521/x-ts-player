@@ -1,5 +1,4 @@
 import { VideoRender } from "./video-render";
-import { SpeedControl } from "./speed-control";
 
 interface WebcodecPlayerOptions {
     codec: 'h264' | 'h265' | 'vp9' | 'vp8';
@@ -19,7 +18,6 @@ export class WebcodecPlayer {
     private decoderProfile: VideoDecoderConfig | null;
     private decoder: VideoDecoder | null;
     private frameCount: number = 0;
-    private speedControl: SpeedControl | null = null;
 
     constructor(options: WebcodecPlayerOptions) {
         this.options = options;
@@ -40,16 +38,6 @@ export class WebcodecPlayer {
         this.decoder = null;
 
         this.createDecoder();
-        this.initSpeedControl();
-    }
-
-    private initSpeedControl() {
-        // 初始化速度控制器，每40ms输出一帧到解码器
-        this.speedControl = new SpeedControl((encodeVideoChunk: EncodedVideoChunk) => {
-            // this.decodeChunk(encodeVideoChunk);
-        });
-        
-        console.log('[WebcodecPlayer] SpeedControl initialized (40ms per frame)');
     }
 
     private async createDecoder() {
@@ -113,25 +101,17 @@ export class WebcodecPlayer {
      * @param isKeyframe 是否是关键帧
      */
     decode(encodeVideoBuffer: Uint8Array, isKeyframe: boolean) {
-        if (!this.speedControl) {
-            console.warn('[WebcodecPlayer] SpeedControl not initialized');
-            return;
-        }
-
         // 创建 EncodedVideoChunk 并添加到速度控制队列
         const encodedVideoChunk = new EncodedVideoChunk({
             data: encodeVideoBuffer,
             type: isKeyframe ? 'key' : 'delta',
-            timestamp: this.frameCount * 40000 // 40ms per frame in microseconds
+            timestamp: 0
         });
-
-        this.speedControl.addEncodeVideoChunk(encodedVideoChunk);
+        this.decodeChunk(encodedVideoChunk);
         this.frameCount++;
-        
         // 每100帧输出一次调试信息
         if (this.frameCount % 100 === 0) {
-            const queueSize = this.speedControl.getQueueSize();
-            console.log(`[WebcodecPlayer] Received ${this.frameCount} frames, queue size: ${queueSize}`);
+            console.log(`[WebcodecPlayer] Received ${this.frameCount} frames`);
         }
     }
 
@@ -146,7 +126,7 @@ export class WebcodecPlayer {
         }
 
         try {
-            console.log('[WebcodecPlayer] Decoding chunk:', encodedVideoChunk);
+            // console.log('[WebcodecPlayer] Decoding chunk:', encodedVideoChunk);
             this.decoder.decode(encodedVideoChunk);
         } catch (error) {
             console.error(`[WebcodecPlayer] decode error:`, error);
@@ -154,8 +134,6 @@ export class WebcodecPlayer {
     }
 
     destroy() {
-        this.speedControl?.destroy();
-        this.speedControl = null;
         this.decoder?.close();
         this.decoder = null;
         this.decoderProfile = null;

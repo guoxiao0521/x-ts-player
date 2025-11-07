@@ -3,7 +3,7 @@ export class SpeedControl {
     private onFrame: (frame: EncodedVideoChunk) => void;
     private preTime: number = 0;
     private reqId: number = 0;
-    private frameInterval: number = 40; // 每40ms输出一帧
+    private frameInterval: number = 35; // 每40ms输出一帧
     private firstFrameTime: number = 0;
     private paused: boolean = false;
 
