@@ -25,7 +25,7 @@ export interface VideoDemuxDecoderStats {
 }
 
 export interface VideoDemuxDecoderOptions {
-  source: string;
+  source: string | File;
   videoEl?: HTMLVideoElement;
   onProgress?: (stats: Partial<VideoDemuxDecoderStats>) => void;
 }
@@ -54,24 +54,37 @@ export function useVideoDemuxDecoder() {
     let fileSize: bigint = BigInt(0);
     let fileData: Uint8Array | null = null;
 
-    // 先获取文件大小
+    // 处理文件源：支持 File 对象或字符串 URL
     try {
-      const headResponse = await fetch(source, { method: 'HEAD' });
-      const contentLength = headResponse.headers.get('content-length');
-      fileSize = contentLength ? BigInt(contentLength) : BigInt(0);
-
-      // 如果文件较小，一次性加载到内存
-      const maxFileSize = 200 * 1024 * 1024; // 200MB
-      if (fileSize && fileSize < BigInt(maxFileSize)) {
-        console.log('Loading entire file into memory...');
-        const response = await fetch(source);
-        const arrayBuffer = await response.arrayBuffer();
+      if (source instanceof File) {
+        // 如果是 File 对象，直接读取到内存
+        console.log('Loading File object into memory...');
+        fileSize = BigInt(source.size);
+        const arrayBuffer = await source.arrayBuffer();
         fileData = new Uint8Array(arrayBuffer);
         fileSize = BigInt(arrayBuffer.byteLength);
+        console.log(`File loaded: ${source.name}, size: ${fileSize} bytes`);
+      } else {
+        // 如果是字符串 URL，使用原有逻辑
+        const headResponse = await fetch(source, { method: 'HEAD' });
+        const contentLength = headResponse.headers.get('content-length');
+        fileSize = contentLength ? BigInt(contentLength) : BigInt(0);
+
+        // 如果文件较小，一次性加载到内存
+        const maxFileSize = 200 * 1024 * 1024; // 200MB
+        if (fileSize && fileSize < BigInt(maxFileSize)) {
+          console.log('Loading entire file into memory...');
+          const response = await fetch(source);
+          const arrayBuffer = await response.arrayBuffer();
+          fileData = new Uint8Array(arrayBuffer);
+          fileSize = BigInt(arrayBuffer.byteLength);
+        }
       }
     } catch (err) {
       console.error('Error getting file size:', err);
       error.value = err as Error;
+      isLoading.value = false;
+      throw err;
     }
 
     ioReader.onFlush = async (buffer: Uint8Array) => {
@@ -90,32 +103,37 @@ export function useVideoDemuxDecoder() {
         return len;
       }
 
-      // 从 URL 加载数据
-      const len = Math.min(buffer.length, Number(fileSize) - readPos);
-      if (len <= 0) {
-        return IOError.END;
-      }
-
-      try {
-        const endPos = readPos + len - 1;
-        const response = await fetch(source, {
-          headers: {
-            'Range': `bytes=${readPos}-${endPos}`
-          }
-        });
-
-        if (!response.ok && response.status !== 206) {
+      // 从 URL 加载数据（仅当 source 是字符串时）
+      if (typeof source === 'string') {
+        const len = Math.min(buffer.length, Number(fileSize) - readPos);
+        if (len <= 0) {
           return IOError.END;
         }
 
-        const arrayBuffer = await response.arrayBuffer();
-        const data = new Uint8Array(arrayBuffer);
-        const actualLen = Math.min(len, data.length);
-        buffer.set(data.subarray(0, actualLen), 0);
-        readPos += actualLen;
-        return actualLen;
-      } catch (err) {
-        console.error('Error loading data:', err);
+        try {
+          const endPos = readPos + len - 1;
+          const response = await fetch(source, {
+            headers: {
+              'Range': `bytes=${readPos}-${endPos}`
+            }
+          });
+
+          if (!response.ok && response.status !== 206) {
+            return IOError.END;
+          }
+
+          const arrayBuffer = await response.arrayBuffer();
+          const data = new Uint8Array(arrayBuffer);
+          const actualLen = Math.min(len, data.length);
+          buffer.set(data.subarray(0, actualLen), 0);
+          readPos += actualLen;
+          return actualLen;
+        } catch (err) {
+          console.error('Error loading data:', err);
+          return IOError.END;
+        }
+      } else {
+        // File 对象应该已经在 fileData 中，不应该走到这里
         return IOError.END;
       }
     };

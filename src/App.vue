@@ -1,29 +1,44 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { ref } from 'vue';
+import { NUpload, NButton, type UploadFileInfo } from 'naive-ui';
 import { useVideoDemuxDecoder } from './composeable/useVideoDemuxDecoder';
 
 const { processVideoFile, stats, isLoading, error } = useVideoDemuxDecoder();
 const videoRef = ref<HTMLVideoElement | null>(null);
+const fileList = ref<UploadFileInfo[]>([]);
 
-onMounted(async () => {
-  const source = '/videos/17205035330_20250812235126_20250812235138_告警.ts';
+const handleFileChange = async (options: { file: UploadFileInfo; fileList: UploadFileInfo[] }) => {
+  const { file } = options;
+  fileList.value = options.fileList;
 
-  try {
-    const result = await processVideoFile({
-      source,
-      videoEl: videoRef.value!,
-      onProgress: (progressStats) => {
-        // 可以在这里处理进度更新
-        console.log('进度更新:', progressStats);
-      }
-    });
+  // 只处理新添加的文件（status 为 pending）
+  if (file.status === 'pending' && file.file) {
+    try {
+      // 调用 processVideoFile 处理文件
+      const result = await processVideoFile({
+        source: file.file,
+        videoEl: videoRef.value!,
+        onProgress: (progressStats) => {
+          // 可以在这里处理进度更新
+          console.log('进度更新:', progressStats);
+        }
+      });
 
-    console.log('解封装和解码完成，统计信息:', result);
-  } catch (err) {
-    console.error('解封装和解码失败:', err);
+      console.log('解封装和解码完成，统计信息:', result);
+    } catch (err) {
+      console.error('解封装和解码失败:', err);
+    }
   }
+};
 
-});
+const handleRemove = () => {
+  // 文件移除时清空统计信息和状态
+  fileList.value = [];
+  // 重置解码器状态
+  stats.value = null;
+  error.value = null;
+  isLoading.value = false;
+};
 
 </script>
 
@@ -40,8 +55,23 @@ onMounted(async () => {
         <p class="tip">💡 请打开浏览器控制台查看详细解析过程</p>
       </div>
 
-      <!-- 右侧：统计信息 -->
+      <!-- 右侧：上传和统计信息 -->
       <div class="right-panel">
+        <div class="upload-section">
+          <h2>📤 上传视频文件</h2>
+          <n-upload
+            :file-list="fileList"
+            :default-upload="false"
+            accept="video/*,.ts,.mp4,.mkv,.avi,.mov"
+            @change="handleFileChange"
+            @remove="handleRemove"
+            :max="1"
+          >
+            <n-button>选择视频文件</n-button>
+          </n-upload>
+          <p class="upload-tip">支持 TS、MP4、MKV、AVI、MOV 等视频格式</p>
+        </div>
+
         <div v-if="isLoading" class="loading">
           <p>⏳ 正在解析视频文件...</p>
         </div>
@@ -115,6 +145,31 @@ h1 {
 
 .right-panel {
   min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.upload-section {
+  background: #f9f9f9;
+  border-radius: 8px;
+  padding: 20px;
+  border: 1px solid #e0e0e0;
+}
+
+.upload-section h2 {
+  color: #35495e;
+  font-size: 1.3em;
+  margin-bottom: 15px;
+  margin-top: 0;
+}
+
+.upload-tip {
+  color: #999;
+  font-size: 0.85em;
+  margin-top: 10px;
+  text-align: center;
+  font-style: italic;
 }
 
 .video-container {
