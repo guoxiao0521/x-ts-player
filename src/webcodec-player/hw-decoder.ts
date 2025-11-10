@@ -5,11 +5,12 @@ interface WebcodecPlayerOptions {
     width: number;
     height: number;
     videoEl: HTMLVideoElement;
+    description?: Uint8Array; // H.265 需要的 extradata/description
 }
 
 const CodecRecord: Record<string, string> = {
     'h264': 'avc1.42001e',
-    'h265': 'hev1.1.6.1L120.B0',
+    'h265': 'hev1.1.6.L120.B0',
 } as const;
 
 export class WebcodecPlayer {
@@ -18,6 +19,7 @@ export class WebcodecPlayer {
     private decoderProfile: VideoDecoderConfig | null;
     private decoder: VideoDecoder | null;
     private frameCount: number = 0;
+    private hasReceivedKeyframe: boolean = false; // 跟踪是否已收到第一个关键帧
 
     constructor(options: WebcodecPlayerOptions) {
         this.options = options;
@@ -53,6 +55,12 @@ export class WebcodecPlayer {
             codedHeight: this.options.height,
             codec: codecString,
         } as VideoDecoderConfig;
+
+        // H.265 需要 description 字段
+        if (this.options.codec === 'h265' && this.options.description) {
+            this.decoderProfile.description = this.options.description;
+            console.log(`[WebcodecPlayer] Added description for H.265, size: ${this.options.description.length} bytes`);
+        }
         
         // 检查浏览器是否支持该编解码器
         try {
@@ -123,6 +131,17 @@ export class WebcodecPlayer {
         if (!this.decoder) {
             console.warn('[WebcodecPlayer] Decoder not initialized');
             return;
+        }
+
+        // 如果还没有收到第一个关键帧，跳过所有非关键帧
+        // WebCodecs 要求 configure() 后第一个解码的帧必须是关键帧
+        if (!this.hasReceivedKeyframe) {
+            if (encodedVideoChunk.type !== 'key') {
+                console.log('[WebcodecPlayer] Skipping non-keyframe before first keyframe');
+                return;
+            }
+            this.hasReceivedKeyframe = true;
+            console.log('[WebcodecPlayer] Received first keyframe, starting decoding');
         }
 
         try {
