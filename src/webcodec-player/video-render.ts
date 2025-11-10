@@ -74,7 +74,6 @@ export class VideoRender {
      * @param videoFrame - VideoFrame 对象
      */
     public render(videoFrame: VideoFrame): void {
-        console.log(videoFrame)
         if (this.videoWriter) {
             try {
                 this.videoWriter.write(videoFrame);

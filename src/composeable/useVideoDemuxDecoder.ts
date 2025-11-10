@@ -324,7 +324,9 @@ export function useVideoDemuxDecoder() {
         // 尝试从 codecpar 中获取 extradata
         if (videoStream.codecpar.extradata && videoStream.codecpar.extradataSize > 0) {
           const extradataSize = Number(videoStream.codecpar.extradataSize);
-          description = mapUint8Array(videoStream.codecpar.extradata, extradataSize);
+          const extradataView = mapUint8Array(videoStream.codecpar.extradata, extradataSize);
+          // Clone data because mapUint8Array only returns a view into libmedia's WASM memory.
+          description = new Uint8Array(extradataView);
           console.log(`提取到 extradata，大小: ${extradataSize} 字节`);
         } else {
           console.log('未找到 extradata，将在第一个关键帧中提取');
@@ -545,9 +547,9 @@ export function useVideoDemuxDecoder() {
           player!.decode(frameData.data, frameData.isKeyframe);
           decodedFrameCount++;
           
-          if (decodedFrameCount <= 100 || frameData.isKeyframe) {
-            console.log(`✅ 解码视频帧 #${frameData.packetIndex}, size: ${frameData.data.length}, ${frameData.isKeyframe ? '关键帧' : '普通帧'}`);
-          }
+          // if (decodedFrameCount <= 100 || frameData.isKeyframe) {
+          //   console.log(`✅ 解码视频帧 #${frameData.packetIndex}, size: ${frameData.data.length}, ${frameData.isKeyframe ? '关键帧' : '普通帧'}`);
+          // }
         } catch (err) {
           console.error(`❌ 解码视频帧失败 #${frameData.packetIndex}:`, err);
         }
@@ -570,7 +572,7 @@ export function useVideoDemuxDecoder() {
       await new Promise<void>((resolve) => {
         const checkInterval = setInterval(() => {
           const queueSize = speedControl.getQueueSize();
-          console.log(`解码进度: ${decodedFrameCount}/${videoFrameCache.length}, 队列剩余: ${queueSize}`);
+          // console.log(`解码进度: ${decodedFrameCount}/${videoFrameCache.length}, 队列剩余: ${queueSize}`);
           
           // 当队列为空且所有帧都已解码时，完成
           if (queueSize === 0 && decodedFrameCount >= videoFrameCache.length) {

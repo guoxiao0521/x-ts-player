@@ -49,7 +49,6 @@ export class SpeedControl {
      */
     addEncodeVideoChunk(encodeVideoChunk: EncodedVideoChunk) {
         this.encodeVideoChunkQueue.push(encodeVideoChunk);
-        console.log('addEncodeVideoChunk', encodeVideoChunk);
         // 记录第一帧到达时间
         if (!this.firstFrameTime) {
             console.log('firstFrameTime', performance.now());
