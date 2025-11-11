@@ -13,6 +13,7 @@ import structAccess from '@libmedia/cheap/std/structAccess';
 import { mapUint8Array } from '@libmedia/cheap/std/memory';
 import { WebcodecPlayer, detectKeyframe } from '../webcodec-player';
 import { SpeedControl } from '../webcodec-player/speed-control';
+import { extractH264Description, extractH265Description } from '../webcodec-player/codec-description';
 
 export interface VideoDemuxDecoderStats {
   videoCodecName: string;
@@ -30,85 +31,6 @@ export interface VideoDemuxDecoderOptions {
   source: string | File;
   videoEl?: HTMLVideoElement;
   onProgress?: (stats: Partial<VideoDemuxDecoderStats>) => void;
-}
-
-/**
- * 从 H.265 关键帧中提取 VPS/SPS/PPS 参数集，构建 WebCodecs description
- * @param data 视频帧数据
- * @returns description 数据，如果提取失败返回 undefined
- */
-function extractH265Description(data: Uint8Array): Uint8Array | undefined {
-  const nalUnits: Uint8Array[] = [];
-  let i = 0;
-
-  // 查找所有 NAL 单元
-  while (i < data.length - 4) {
-    let nalStart = -1;
-    let nalStartCodeLength = 0;
-
-    // 检查 4 字节起始码
-    if (data[i] === 0x00 && data[i + 1] === 0x00 && data[i + 2] === 0x00 && data[i + 3] === 0x01) {
-      nalStart = i + 4;
-      nalStartCodeLength = 4;
-    }
-    // 检查 3 字节起始码
-    else if (data[i] === 0x00 && data[i + 1] === 0x00 && data[i + 2] === 0x01) {
-      nalStart = i + 3;
-      nalStartCodeLength = 3;
-    }
-
-    if (nalStart >= 0) {
-      // 找到下一个起始码
-      let nalEnd = data.length;
-      for (let j = nalStart; j < data.length - 3; j++) {
-        if ((data[j] === 0x00 && data[j + 1] === 0x00 && data[j + 2] === 0x01) ||
-            (data[j] === 0x00 && data[j + 1] === 0x00 && data[j + 2] === 0x00 && data[j + 3] === 0x01)) {
-          nalEnd = j;
-          break;
-        }
-      }
-
-      if (nalStart >= 0 && nalStart < nalEnd && nalStart < data.length) {
-        const nalByte = data[nalStart];
-        if (nalByte !== undefined) {
-          const nalType = (nalByte >> 1) & 0x3F;
-          // VPS (32), SPS (33), PPS (34)
-          if (nalType >= 32 && nalType <= 34) {
-            const nalData = data.subarray(nalStart, nalEnd);
-            nalUnits.push(nalData);
-          }
-        }
-      }
-
-      i = nalStart;
-    } else {
-      i++;
-    }
-  }
-
-  if (nalUnits.length === 0) {
-    return undefined;
-  }
-
-  // 构建 description：每个 NAL 单元前加上长度（2 字节，big-endian）
-  let totalLength = 0;
-  for (const nal of nalUnits) {
-    totalLength += 2 + nal.length;
-  }
-
-  const description = new Uint8Array(totalLength);
-  let offset = 0;
-  for (const nal of nalUnits) {
-    // 写入长度（2 字节，big-endian）
-    description[offset] = (nal.length >> 8) & 0xFF;
-    description[offset + 1] = nal.length & 0xFF;
-    offset += 2;
-    // 写入 NAL 单元数据
-    description.set(nal, offset);
-    offset += nal.length;
-  }
-
-  return description;
 }
 
 /**
@@ -318,7 +240,7 @@ export function useVideoDemuxDecoder() {
 
       const codecType = videoCodecName.toLowerCase() === 'h264' ? 'h264' : 'h265';
       
-      // 提取 extradata/description（用于 H.265）
+      // 提取 extradata/description（用于 H.264 和 H.265）
       let description: Uint8Array | undefined = undefined;
       try {
         // 尝试从 codecpar 中获取 extradata
@@ -338,12 +260,12 @@ export function useVideoDemuxDecoder() {
       // 如果没有提供 videoEl，创建一个临时的 video 元素用于解码
       const targetVideoEl = videoEl || document.createElement('video');
       
-      // 先创建 player，但如果是 H.265 且没有 description，需要延迟配置
+      // 先创建 player，但如果 H.264/H.265 且没有 description，需要延迟配置
       let player: WebcodecPlayer | null = null;
       
-      // 如果 H.265 且没有 description，先不创建 player，等找到第一个关键帧后再创建
-      if (codecType === 'h265' && !description) {
-        console.log('H.265 未找到 extradata，将在找到第一个关键帧后提取 description');
+      // 如果 H.264/H.265 且没有 description，先不创建 player，等找到第一个关键帧后再创建
+      if ((codecType === 'h264' || codecType === 'h265') && !description) {
+        console.log(`${codecType.toUpperCase()} 未找到 extradata，将在找到第一个关键帧后提取 description`);
       } else {
         player = new WebcodecPlayer({
           codec: codecType,
@@ -424,13 +346,17 @@ export function useVideoDemuxDecoder() {
             });
           }
 
-          // 如果是 H.265 且还没有 description，尝试从第一个关键帧中提取
-          if (codecType === 'h265' && !description && isKeyframe && pkt.data && pkt.size > 0) {
+          // 如果是 H.264/H.265 且还没有 description，尝试从第一个关键帧中提取
+          if ((codecType === 'h264' || codecType === 'h265') && !description && isKeyframe && pkt.data && pkt.size > 0) {
             try {
               const videoData = mapUint8Array(pkt.data, pkt.size);
-              description = extractH265Description(videoData);
+              if (codecType === 'h264') {
+                description = extractH264Description(videoData);
+              } else {
+                description = extractH265Description(videoData);
+              }
               if (description) {
-                console.log(`从第一个关键帧提取到 description，大小: ${description.length} 字节`);
+                console.log(`从第一个关键帧提取到 ${codecType.toUpperCase()} description，大小: ${description.length} 字节`);
                 // 现在创建 player
                 if (!player) {
                   player = new WebcodecPlayer({
@@ -469,15 +395,19 @@ export function useVideoDemuxDecoder() {
       console.log(`缓存的视频帧数: ${videoFrameCache.length}`);
       console.log(`关键帧数量: ${keyframeCount}`);
 
-      // 如果 H.265 且还没有创建 player（说明没有找到 extradata 且第一个关键帧也没有提取到 description）
-      if (codecType === 'h265' && !player) {
-        console.warn('警告: H.265 未找到 description，尝试从缓存的第一个关键帧中提取');
+      // 如果 H.264/H.265 且还没有创建 player（说明没有找到 extradata 且第一个关键帧也没有提取到 description）
+      if ((codecType === 'h264' || codecType === 'h265') && !player) {
+        console.warn(`警告: ${codecType.toUpperCase()} 未找到 description，尝试从缓存的第一个关键帧中提取`);
         // 查找第一个关键帧
         for (const frameData of videoFrameCache) {
           if (frameData.isKeyframe) {
-            description = extractH265Description(frameData.data);
+            if (codecType === 'h264') {
+              description = extractH264Description(frameData.data);
+            } else {
+              description = extractH265Description(frameData.data);
+            }
             if (description) {
-              console.log(`从缓存的关键帧提取到 description，大小: ${description.length} 字节`);
+              console.log(`从缓存的关键帧提取到 ${codecType.toUpperCase()} description，大小: ${description.length} 字节`);
               player = new WebcodecPlayer({
                 codec: codecType,
                 width: videoWidth || 1920,
@@ -492,7 +422,7 @@ export function useVideoDemuxDecoder() {
         
         // 如果仍然没有创建 player，使用空 description 创建（可能会失败，但至少尝试）
         if (!player) {
-          console.warn('警告: 无法提取 H.265 description，尝试使用空 description');
+          console.warn(`警告: 无法提取 ${codecType.toUpperCase()} description，尝试使用空 description`);
           player = new WebcodecPlayer({
             codec: codecType,
             width: videoWidth || 1920,

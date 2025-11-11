@@ -5,7 +5,7 @@ interface WebcodecPlayerOptions {
     width: number;
     height: number;
     videoEl: HTMLVideoElement;
-    description?: Uint8Array; // H.265 需要的 extradata/description
+    description?: Uint8Array; // H.264 和 H.265 需要的 extradata/description
 }
 
 const CodecRecord: Record<string, string> = {
@@ -56,10 +56,10 @@ export class WebcodecPlayer {
             codec: codecString,
         } as VideoDecoderConfig;
 
-        // H.265 需要 description 字段
-        if (this.options.codec === 'h265' && this.options.description) {
+        // H.264 和 H.265 需要 description 字段
+        if ((this.options.codec === 'h264' || this.options.codec === 'h265') && this.options.description) {
             this.decoderProfile.description = this.options.description;
-            console.log(`[WebcodecPlayer] Added description for H.265, size: ${this.options.description.length} bytes`);
+            console.log(`[WebcodecPlayer] Added description for ${this.options.codec.toUpperCase()}, size: ${this.options.description.length} bytes`);
         }
         
         // 检查浏览器是否支持该编解码器
