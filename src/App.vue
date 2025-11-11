@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { NUpload, NButton, type UploadFileInfo } from 'naive-ui';
+import { NUpload, NButton, NRadioGroup, NRadio, type UploadFileInfo } from 'naive-ui';
 import { useVideoDemuxDecoder } from './composeable/useVideoDemuxDecoder';
 
 const { processVideoFile, stats, isLoading, error } = useVideoDemuxDecoder();
 const videoRef = ref<HTMLVideoElement | null>(null);
 const fileList = ref<UploadFileInfo[]>([]);
+const codecType = ref<'auto' | 'h264' | 'h265'>('auto'); // 编码格式选择：自动 / H264 / H265
 
 const handleFileChange = async (options: { file: UploadFileInfo; fileList: UploadFileInfo[] }) => {
   const { file } = options;
@@ -18,6 +19,7 @@ const handleFileChange = async (options: { file: UploadFileInfo; fileList: Uploa
       const result = await processVideoFile({
         source: file.file,
         videoEl: videoRef.value!,
+        forceCodecType: codecType.value === 'auto' ? undefined : codecType.value,
         onProgress: (progressStats) => {
           // 可以在这里处理进度更新
           console.log('进度更新:', progressStats);
@@ -44,7 +46,7 @@ const handleRemove = () => {
 
 <template>
   <div class="app-container">
-    <h1>🎬 TS 视频文件播放器</h1>
+    <h1>🎬 VIDemo Plus</h1>
 
     <div class="main-layout">
       <!-- 左侧：视频播放器 -->
@@ -70,6 +72,16 @@ const handleRemove = () => {
             <n-button>选择视频文件</n-button>
           </n-upload>
           <p class="upload-tip">支持 TS、MP4、MKV、AVI、MOV 等视频格式</p>
+          
+          <div class="codec-type-selector">
+            <label class="codec-label">🎬 编码格式:</label>
+            <n-radio-group v-model:value="codecType" size="small">
+              <n-radio value="auto">自动</n-radio>
+              <n-radio value="h264">H264</n-radio>
+              <n-radio value="h265">H265</n-radio>
+            </n-radio-group>
+            <p class="selector-tip">💡 如果文件编码格式信息错误，可手动指定编码格式</p>
+          </div>
         </div>
 
         <div v-if="isLoading" class="loading">
@@ -169,6 +181,29 @@ h1 {
   font-size: 0.85em;
   margin-top: 10px;
   text-align: center;
+  font-style: italic;
+}
+
+.codec-type-selector {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #e0e0e0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.codec-label {
+  color: #35495e;
+  font-weight: 600;
+  font-size: 0.9em;
+}
+
+.selector-tip {
+  color: #999;
+  font-size: 0.8em;
+  text-align: center;
+  margin: 0;
   font-style: italic;
 }
 

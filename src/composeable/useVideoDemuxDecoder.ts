@@ -31,6 +31,7 @@ export interface VideoDemuxDecoderOptions {
   source: string | File;
   videoEl?: HTMLVideoElement;
   onProgress?: (stats: Partial<VideoDemuxDecoderStats>) => void;
+  forceCodecType?: 'h264' | 'h265'; // 强制指定编码格式（用于修复错误的编码格式信息）
 }
 
 /**
@@ -75,7 +76,7 @@ export function useVideoDemuxDecoder() {
     isLoading.value = true;
     error.value = null;
     
-    const { source, videoEl, onProgress } = options;
+    const { source, videoEl, onProgress, forceCodecType } = options;
     
     const iformatContext = createAVIFormatContext();
     const ioReader = new IOReader();
@@ -238,7 +239,12 @@ export function useVideoDemuxDecoder() {
       const videoWidth = videoStream.codecpar.width || 0;
       const videoHeight = videoStream.codecpar.height || 0;
 
-      const codecType = videoCodecName.toLowerCase() === 'h264' ? 'h264' : 'h265';
+      // 如果强制指定了编码格式，使用强制指定的值；否则根据检测到的编码格式自动判断
+      const codecType = forceCodecType || (videoCodecName.toLowerCase() === 'h264' ? 'h264' : 'h265');
+      
+      if (forceCodecType) {
+        console.log(`⚠️ 强制使用 ${forceCodecType.toUpperCase()} 编码格式（检测到的格式: ${videoCodecName}）`);
+      }
       
       // 提取 extradata/description（用于 H.264 和 H.265）
       let description: Uint8Array | undefined = undefined;
