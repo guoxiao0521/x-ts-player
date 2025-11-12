@@ -26,7 +26,6 @@ import UploadBar from './components/UploadBar.vue';
 const { processVideoFile, stats, isLoading, error } = useVideoDemuxDecoder();
 const videoRef = ref<HTMLVideoElement | null>(null);
 const fileList = ref<UploadFileInfo[]>([]);
-const codecType = ref<'auto' | 'h264' | 'h265'>('auto');
 const showStats = ref(false); // 统计信息默认隐藏
 
 // 视频播放控制状态（仅用于UI演示，实际控制通过原生video controls）
@@ -44,7 +43,6 @@ const handleFileChange = async (options: { file: UploadFileInfo; fileList: Uploa
       const result = await processVideoFile({
         source: file.file,
         videoEl: videoRef.value!,
-        forceCodecType: codecType.value === 'auto' ? undefined : codecType.value,
         onProgress: (progressStats) => {
           console.log('进度更新:', progressStats);
         }
@@ -92,7 +90,6 @@ useMotion(controlsRef, {
     <!-- 顶部上传栏 -->
     <UploadBar
       v-model:file-list="fileList"
-      v-model:codec-type="codecType"
       :is-loading="isLoading"
       :error="error"
       :stats="stats"

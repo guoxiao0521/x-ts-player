@@ -1,12 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { NUpload, NRadioGroup, NRadio, type UploadFileInfo } from 'naive-ui';
-import { Upload, Settings, X } from 'lucide-vue-next';
-import GlassIconButton from './GlassIconButton.vue';
+import { NUpload, type UploadFileInfo } from 'naive-ui';
+import { Upload } from 'lucide-vue-next';
 
 const props = defineProps<{
   fileList: UploadFileInfo[];
-  codecType: 'auto' | 'h264' | 'h265';
   isLoading: boolean;
   error: Error | null;
   stats: any;
@@ -14,14 +12,11 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:fileList': [value: UploadFileInfo[]];
-  'update:codecType': [value: 'auto' | 'h264' | 'h265'];
   'change': [options: { file: UploadFileInfo; fileList: UploadFileInfo[] }];
   'remove': [];
 }>();
 
 const localFileList = ref(props.fileList);
-const localCodecType = ref(props.codecType);
-const showSettings = ref(false);
 
 const handleFileChange = (options: { file: UploadFileInfo; fileList: UploadFileInfo[] }) => {
   localFileList.value = options.fileList;
@@ -33,11 +28,6 @@ const handleRemove = () => {
   localFileList.value = [];
   emit('update:fileList', []);
   emit('remove');
-};
-
-const handleCodecTypeChange = (value: 'auto' | 'h264' | 'h265') => {
-  localCodecType.value = value;
-  emit('update:codecType', value);
 };
 </script>
 
@@ -94,46 +84,6 @@ const handleCodecTypeChange = (value: 'auto' | 'h264' | 'h265') => {
               <span class="inline-block size-2 rounded-full bg-emerald-400" />
               <span class="text-white/80 text-sm hidden sm:inline">{{ stats.width }}x{{ stats.height }}</span>
             </div>
-
-            <!-- 设置按钮 -->
-            <GlassIconButton
-              :aria-label="showSettings ? '关闭设置' : '打开设置'"
-              @click="showSettings = !showSettings"
-            >
-              <X v-if="showSettings" class="size-4" />
-              <Settings v-else class="size-4" />
-            </GlassIconButton>
-          </div>
-        </div>
-
-        <!-- 展开的设置面板 -->
-        <div
-          v-show="showSettings"
-          class="border-t border-white/10 px-5 py-4"
-        >
-          <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <!-- 编码格式选择 -->
-            <div class="flex items-center gap-4">
-              <label class="text-white/80 text-sm font-medium flex items-center gap-2">
-                <Settings class="size-4" />
-                编码格式
-              </label>
-              <n-radio-group
-                :value="localCodecType"
-                @update:value="handleCodecTypeChange"
-                size="small"
-                class="flex gap-3"
-              >
-                <n-radio value="auto" class="text-white/80">自动</n-radio>
-                <n-radio value="h264" class="text-white/80">H264</n-radio>
-                <n-radio value="h265" class="text-white/80">H265</n-radio>
-              </n-radio-group>
-            </div>
-
-            <!-- 提示文本 -->
-            <p class="text-white/50 text-xs">
-              支持 TS、MP4、MKV、AVI、MOV 等格式
-            </p>
           </div>
         </div>
       </div>
@@ -145,18 +95,6 @@ const handleCodecTypeChange = (value: 'auto' | 'h264' | 'h265') => {
 /* 确保 naive-ui 组件样式适配深色背景 */
 :deep(.n-upload) {
   color: rgba(255, 255, 255, 0.9);
-}
-
-:deep(.n-radio) {
-  color: rgba(255, 255, 255, 0.8);
-}
-
-:deep(.n-radio--checked) {
-  color: rgba(255, 255, 255, 0.95);
-}
-
-:deep(.n-radio-group) {
-  color: rgba(255, 255, 255, 0.8);
 }
 </style>
 
