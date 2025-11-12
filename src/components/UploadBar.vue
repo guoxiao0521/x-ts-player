@@ -36,12 +36,12 @@ const handleRemove = () => {
     <div class="max-w-[min(1200px,92vw)] mx-auto">
       <!-- 主上传栏 -->
       <div class="backdrop-blur-2xl bg-white/10 rounded-2xl border border-white/15 shadow-[inset_0_1px_0_rgba(255,255,255,.35),0_8px_30px_rgba(0,0,0,.35)]">
-        <div class="flex items-center justify-between gap-4 px-5 py-3">
+        <div class="flex flex-nowrap items-center justify-between gap-4 px-5 py-3">
           <!-- 左侧：标题和上传按钮 -->
-          <div class="flex items-center gap-4">
+          <div class="flex flex-shrink-0 items-center gap-4">
             <div class="flex items-center gap-2 text-white/90">
-              <Upload class="size-5" />
-              <span class="font-semibold hidden sm:inline w-20">视频文件</span>
+              <Upload class="size-5 flex-shrink-0" />
+              <span class="font-semibold hidden sm:inline whitespace-nowrap">视频文件</span>
             </div>
             
             <n-upload
@@ -51,22 +51,16 @@ const handleRemove = () => {
               @change="handleFileChange"
               @remove="handleRemove"
               :max="1"
+              class="flex align-center"
             >
-              <button class="backdrop-blur-xl bg-white/10 hover:bg-white/15 border border-white/15 hover:border-white/20 shadow-[inset_0_1px_0_rgba(255,255,255,.35),0_4px_16px_rgba(0,0,0,.25)] text-white/90 px-4 py-1.5 rounded-xl transition-all text-sm">
+              <button class="backdrop-blur-xl bg-white/10 hover:bg-white/15 border border-white/15 hover:border-white/20 shadow-[inset_0_1px_0_rgba(255,255,255,.35),0_4px_16px_rgba(0,0,0,.25)] text-white/90 px-4 py-1.5 rounded-xl transition-all text-sm whitespace-nowrap flex-shrink-0">
                 选择文件
               </button>
             </n-upload>
           </div>
 
-          <!-- 中间：文件名显示 -->
-          <div v-if="localFileList.length > 0" class="flex-1 min-w-0 hidden md:block">
-            <p class="text-white/80 text-sm truncate">
-              {{ localFileList[0]?.name }}
-            </p>
-          </div>
-
           <!-- 右侧：状态和设置按钮 -->
-          <div class="flex items-center gap-3">
+          <div class="flex flex-shrink-0 items-center gap-3">
             <!-- 加载状态 -->
             <div v-if="isLoading" class="flex items-center gap-2">
               <span class="inline-block size-2 rounded-full bg-blue-400 animate-pulse" />

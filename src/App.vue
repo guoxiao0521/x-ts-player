@@ -1,38 +1,44 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { type UploadFileInfo } from 'naive-ui';
+import { useMouseInElement } from '@vueuse/core';
 import { useVideoDemuxDecoder } from './composeable/useVideoDemuxDecoder';
-import { useMotion } from '@vueuse/motion';
 import {
   Play,
   Pause,
-  Volume2,
-  VolumeX,
-  Settings,
-  Maximize2,
-  Airplay,
-  SkipBack,
-  SkipForward,
   Info,
   ChevronDown,
   ChevronUp,
 } from 'lucide-vue-next';
-import Slider from './components/ui/Slider.vue';
-import GlassIconButton from './components/GlassIconButton.vue';
-import GlassPillToggle from './components/GlassPillToggle.vue';
 import ChevronLight from './components/ChevronLight.vue';
 import UploadBar from './components/UploadBar.vue';
+import VideoControlBar from './components/VideoControlBar.vue';
 
 const { processVideoFile, stats, isLoading, error } = useVideoDemuxDecoder();
 const videoRef = ref<HTMLVideoElement | null>(null);
+const videoContainerRef = ref<HTMLElement | null>(null);
 const fileList = ref<UploadFileInfo[]>([]);
 const showStats = ref(false); // 统计信息默认隐藏
+
+// 使用 vueuse 检测鼠标是否在视频容器内
+const { isOutside } = useMouseInElement(videoContainerRef);
+// 如果未开始播放则始终显示，如果已经开始播放则鼠标移入才显示
+const showControls = computed(() => {
+  // 如果视频当前处于暂停状态（未播放），始终显示
+  if (!playing.value) {
+    return true;
+  }
+  // 如果视频正在播放，根据鼠标位置决定
+  return !isOutside.value;
+});
 
 // 视频播放控制状态（仅用于UI演示，实际控制通过原生video controls）
 const playing = ref(false);
 const muted = ref(false);
 const volume = ref<number[]>([70]);
-const progress = ref<number[]>([28]);
+const progress = ref<number[]>([0]);
+const currentTime = ref(0);
+const duration = ref(0);
 
 const handleFileChange = async (options: { file: UploadFileInfo; fileList: UploadFileInfo[] }) => {
   const { file } = options;
@@ -76,13 +82,56 @@ const gradientMask = computed(
      radial-gradient(900px 600px at 110% 90%, rgba(236,72,153,.15) 0%, rgba(236,72,153,0) 60%)`
 );
 
-// 动画引用
-const controlsRef = ref<HTMLElement | null>(null);
-useMotion(controlsRef, {
-  initial: { y: 28, opacity: 0 },
-  enter: { y: 0, opacity: 1 },
-  transition: { type: 'spring', stiffness: 140, damping: 18 }
-});
+// 控制条事件处理
+const handlePlayPause = () => {
+  playing.value = !playing.value;
+  if (videoRef.value) {
+    if (videoRef.value.paused) {
+      videoRef.value.play();
+    } else {
+      videoRef.value.pause();
+    }
+  }
+};
+
+const handleToggleMute = () => {
+  muted.value = !muted.value;
+  if (videoRef.value) {
+    videoRef.value.muted = muted.value;
+  }
+};
+
+const handleSkipBack = () => {
+  if (videoRef.value) {
+    videoRef.value.currentTime = Math.max(0, videoRef.value.currentTime - 10);
+    currentTime.value = videoRef.value.currentTime;
+  }
+};
+
+const handleSkipForward = () => {
+  if (videoRef.value) {
+    videoRef.value.currentTime = Math.min(
+      videoRef.value.duration || 0,
+      videoRef.value.currentTime + 10
+    );
+    currentTime.value = videoRef.value.currentTime;
+  }
+};
+
+const handleFullscreen = () => {
+  if (videoRef.value) {
+    if (videoRef.value.requestFullscreen) {
+      videoRef.value.requestFullscreen();
+    }
+  }
+};
+
+const handleSeek = (time: number) => {
+  if (videoRef.value) {
+    videoRef.value.currentTime = time;
+    currentTime.value = time;
+  }
+};
 </script>
 
 <template>
@@ -100,6 +149,7 @@ useMotion(controlsRef, {
     <!-- 视频播放器容器 - 居中显示 -->
     <div class="w-full min-h-screen flex items-center justify-center p-4 pt-24">
       <div
+        ref="videoContainerRef"
         class="relative w-full max-w-[min(1200px,92vw)] aspect-[16/9] rounded-[28px] overflow-hidden shadow-[0_20px_80px_-20px_rgba(0,0,0,.6)] ring-1 ring-white/10"
       >
         <!-- 背景层：渐变光雾 -->
@@ -117,6 +167,9 @@ useMotion(controlsRef, {
             autoplay
             @play="playing = true"
             @pause="playing = false"
+            @timeupdate="currentTime = videoRef?.currentTime || 0"
+            @loadedmetadata="duration = videoRef?.duration || 0"
+            @durationchange="duration = videoRef?.duration || 0"
           ></video>
 
           <!-- 顶部微光与镜面反射条 -->
@@ -126,94 +179,65 @@ useMotion(controlsRef, {
         </div>
 
         <!-- 中心大播放按钮（毛玻璃圆片） -->
-        <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-          <button
-            v-motion="{
-              initial: { scale: 1 },
-              hover: { scale: 1.04 },
-              tap: { scale: 0.98 }
-            }"
-            @click="playing = !playing; videoRef && (videoRef.paused ? videoRef.play() : videoRef.pause())"
-            class="group backdrop-blur-xl bg-white/12 border border-white/20 shadow-[inset_0_1px_0_rgba(255,255,255,.25),0_8px_30px_rgba(0,0,0,.35)] rounded-full p-6 flex items-center justify-center"
-          >
-            <div class="relative size-16 grid place-items-center">
-              <div class="absolute inset-0 rounded-full bg-gradient-to-br from-white/40 to-white/10 opacity-70" />
-              <div class="absolute inset-0 rounded-full ring-1 ring-white/30" />
-              <Pause v-if="playing" class="relative size-8 text-white drop-shadow" />
-              <Play v-else class="relative size-8 text-white drop-shadow translate-x-0.5" />
-            </div>
-          </button>
-        </div>
+        <Transition
+          enter-active-class="transition-all duration-300 ease-out"
+          enter-from-class="opacity-0 scale-90"
+          enter-to-class="opacity-100 scale-100"
+          leave-active-class="transition-all duration-200 ease-in"
+          leave-from-class="opacity-100 scale-100"
+          leave-to-class="opacity-0 scale-90"
+        >
+          <div v-show="showControls" class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-auto">
+            <button
+              v-motion="{
+                initial: { scale: 1 },
+                hover: { scale: 1.04 },
+                tap: { scale: 0.98 }
+              }"
+              @click="handlePlayPause"
+              class="group backdrop-blur-xl bg-white/12 border border-white/20 shadow-[inset_0_1px_0_rgba(255,255,255,.25),0_8px_30px_rgba(0,0,0,.35)] rounded-full p-6 flex items-center justify-center"
+            >
+              <div class="relative size-16 grid place-items-center">
+                <div class="absolute inset-0 rounded-full bg-gradient-to-br from-white/40 to-white/10 opacity-70" />
+                <div class="absolute inset-0 rounded-full ring-1 ring-white/30" />
+                <Pause v-if="playing" class="relative size-8 text-white drop-shadow" />
+                <Play v-else class="relative size-8 text-white drop-shadow translate-x-0.5" />
+              </div>
+            </button>
+          </div>
+        </Transition>
 
         <!-- 底部控制条（iOS 26 风格毛玻璃 Dock） -->
-        <div
-          ref="controlsRef"
-          class="absolute left-5 right-5 bottom-5"
+        <Transition
+          enter-active-class="transition-all duration-300 ease-out"
+          enter-from-class="opacity-0 translate-y-4"
+          enter-to-class="opacity-100 translate-y-0"
+          leave-active-class="transition-all duration-200 ease-in"
+          leave-from-class="opacity-100 translate-y-0"
+          leave-to-class="opacity-0 translate-y-4"
         >
-          <div class="backdrop-blur-2xl bg-white/10 rounded-2xl md:rounded-3xl border border-white/15 shadow-[inset_0_1px_0_rgba(255,255,255,.35),0_12px_60px_rgba(0,0,0,.45)]">
-            <!-- 进度条 -->
-            <div class="px-4 sm:px-6 pt-4 sm:pt-5">
-              <Slider v-model="progress" :max="100" />
-              <div class="mt-2 flex items-center justify-between text-[11px] text-white/70">
-                <span>00:42</span>
-                <span>12:30</span>
-              </div>
-            </div>
-
-            <!-- 控件行 -->
-            <div class="flex flex-wrap items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3">
-              <!-- 左侧：播放组 -->
-              <div class="flex items-center gap-2 sm:gap-3">
-                <GlassIconButton aria-label="后退 10 秒">
-                  <SkipBack class="size-4" />
-                </GlassIconButton>
-                <GlassPillToggle
-                  :active="playing"
-                  active-label="暂停"
-                  inactive-label="播放"
-                  @click="playing = !playing; videoRef && (videoRef.paused ? videoRef.play() : videoRef.pause())"
-                >
-                  <template #iconActive>
-                    <Pause class="size-4" />
-                  </template>
-                  <template #iconInactive>
-                    <Play class="size-4 translate-x-[1px]" />
-                  </template>
-                </GlassPillToggle>
-                <GlassIconButton aria-label="前进 10 秒">
-                  <SkipForward class="size-4" />
-                </GlassIconButton>
-              </div>
-
-              <!-- 中部：音量组 -->
-              <div class="ml-auto md:ml-6 flex items-center gap-3">
-                <GlassIconButton
-                  :aria-label="muted ? '取消静音' : '静音'"
-                  @click="muted = !muted; if (videoRef) videoRef.muted = muted"
-                >
-                  <VolumeX v-if="muted" class="size-4" />
-                  <Volume2 v-else class="size-4" />
-                </GlassIconButton>
-                <div class="w-[120px] hidden sm:block">
-                  <Slider v-model="volume" :max="100" />
-                </div>
-              </div>
-
-              <!-- 右侧：功能组 -->
-              <div class="ml-auto flex items-center gap-2 sm:gap-3">
-                <GlassIconButton aria-label="AirPlay">
-                  <Airplay class="size-4" />
-                </GlassIconButton>
-                <GlassIconButton aria-label="设置">
-                  <Settings class="size-4" />
-                </GlassIconButton>
-                <GlassIconButton aria-label="全屏">
-                  <Maximize2 class="size-4" />
-                </GlassIconButton>
-              </div>
-            </div>
-          </div>
-        </div>
+          <VideoControlBar
+            v-show="showControls"
+            :playing="playing"
+            :muted="muted"
+            :volume="volume"
+            :progress="progress"
+            :current-time="currentTime"
+            :duration="duration"
+            @update:playing="playing = $event"
+            @update:muted="muted = $event"
+            @update:volume="volume = $event"
+            @update:progress="progress = $event"
+            @play-pause="handlePlayPause"
+            @skip-back="handleSkipBack"
+            @skip-forward="handleSkipForward"
+            @toggle-mute="handleToggleMute"
+            @seek="handleSeek"
+            @airplay="() => {}"
+            @settings="() => {}"
+            @fullscreen="handleFullscreen"
+          />
+        </Transition>
 
         <!-- 顶部胶囊信息条 -->
         <div class="absolute left-5 right-5 top-5 flex items-center justify-between gap-3">
