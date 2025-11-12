@@ -10,17 +10,14 @@ export function extractH264Description(data: Uint8Array): Uint8Array | undefined
   // 查找所有 NAL 单元
   while (i < data.length - 4) {
     let nalStart = -1;
-    let nalStartCodeLength = 0;
 
     // 检查 4 字节起始码
     if (data[i] === 0x00 && data[i + 1] === 0x00 && data[i + 2] === 0x00 && data[i + 3] === 0x01) {
       nalStart = i + 4;
-      nalStartCodeLength = 4;
     }
     // 检查 3 字节起始码
     else if (data[i] === 0x00 && data[i + 1] === 0x00 && data[i + 2] === 0x01) {
       nalStart = i + 3;
-      nalStartCodeLength = 3;
     }
 
     if (nalStart >= 0) {
@@ -90,17 +87,14 @@ export function extractH265Description(data: Uint8Array): Uint8Array | undefined
   // 查找所有 NAL 单元
   while (i < data.length - 4) {
     let nalStart = -1;
-    let nalStartCodeLength = 0;
 
     // 检查 4 字节起始码
     if (data[i] === 0x00 && data[i + 1] === 0x00 && data[i + 2] === 0x00 && data[i + 3] === 0x01) {
       nalStart = i + 4;
-      nalStartCodeLength = 4;
     }
     // 检查 3 字节起始码
     else if (data[i] === 0x00 && data[i + 1] === 0x00 && data[i + 2] === 0x01) {
       nalStart = i + 3;
-      nalStartCodeLength = 3;
     }
 
     if (nalStart >= 0) {

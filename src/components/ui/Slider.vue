@@ -8,14 +8,14 @@
     >
       <div
         class="absolute h-full bg-white/80 transition-all"
-        :style="{ width: `${(modelValue[0] / max) * 100}%` }"
+        :style="{ width: `${((modelValue[0] ?? 0) / max) * 100}%` }"
       />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref } from 'vue'
 
 interface Props {
   modelValue: number[]
