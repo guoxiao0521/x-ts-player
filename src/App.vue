@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { NUpload, NRadioGroup, NRadio, type UploadFileInfo } from 'naive-ui';
+import { type UploadFileInfo } from 'naive-ui';
 import { useVideoDemuxDecoder } from './composeable/useVideoDemuxDecoder';
 import { useMotion } from '@vueuse/motion';
 import {
@@ -13,7 +13,6 @@ import {
   Airplay,
   SkipBack,
   SkipForward,
-  Upload,
   Info,
   ChevronDown,
   ChevronUp,
@@ -22,6 +21,7 @@ import Slider from './components/ui/Slider.vue';
 import GlassIconButton from './components/GlassIconButton.vue';
 import GlassPillToggle from './components/GlassPillToggle.vue';
 import ChevronLight from './components/ChevronLight.vue';
+import UploadBar from './components/UploadBar.vue';
 
 const { processVideoFile, stats, isLoading, error } = useVideoDemuxDecoder();
 const videoRef = ref<HTMLVideoElement | null>(null);
@@ -89,8 +89,19 @@ useMotion(controlsRef, {
 
 <template>
   <div class="w-full min-h-screen bg-black/95 relative">
+    <!-- 顶部上传栏 -->
+    <UploadBar
+      v-model:file-list="fileList"
+      v-model:codec-type="codecType"
+      :is-loading="isLoading"
+      :error="error"
+      :stats="stats"
+      @change="handleFileChange"
+      @remove="handleRemove"
+    />
+
     <!-- 视频播放器容器 - 居中显示 -->
-    <div class="w-full min-h-screen flex items-center justify-center p-4">
+    <div class="w-full min-h-screen flex items-center justify-center p-4 pt-24">
       <div
         class="relative w-full max-w-[min(1200px,92vw)] aspect-[16/9] rounded-[28px] overflow-hidden shadow-[0_20px_80px_-20px_rgba(0,0,0,.6)] ring-1 ring-white/10"
       >
@@ -224,62 +235,8 @@ useMotion(controlsRef, {
       </div>
     </div>
 
-    <!-- 浮动元素：上传和统计信息 - 右上角 -->
-    <div class="fixed top-4 right-4 z-50 flex flex-col gap-4 w-[380px] max-w-[calc(100vw-2rem)] max-h-[calc(100vh-2rem)] overflow-y-auto">
-      <div class="backdrop-blur-2xl bg-white/10 rounded-2xl border border-white/15 shadow-[inset_0_1px_0_rgba(255,255,255,.35),0_8px_30px_rgba(0,0,0,.35)] p-5">
-        <h2 class="text-white/90 text-xl font-semibold mb-4 flex items-center gap-2">
-          <Upload class="size-5" />
-          上传视频文件
-        </h2>
-        <n-upload
-          :file-list="fileList"
-          :default-upload="false"
-          accept="video/*,.ts,.mp4,.mkv,.avi,.mov"
-          @change="handleFileChange"
-          @remove="handleRemove"
-          :max="1"
-        >
-          <button class="backdrop-blur-xl bg-white/10 hover:bg-white/15 border border-white/15 hover:border-white/20 shadow-[inset_0_1px_0_rgba(255,255,255,.35),0_6px_24px_rgba(0,0,0,.30)] text-white/90 px-4 py-2 rounded-xl transition-all">
-            选择视频文件
-          </button>
-        </n-upload>
-        <p class="text-white/60 text-xs mt-3 text-center">
-          支持 TS、MP4、MKV、AVI、MOV 等视频格式
-        </p>
-
-        <!-- 编码格式选择 -->
-        <div class="mt-5 pt-5 border-t border-white/10">
-          <label class="text-white/80 text-sm font-medium mb-3 block flex items-center gap-2">
-            <Settings class="size-4" />
-            编码格式
-          </label>
-          <n-radio-group v-model:value="codecType" size="small" class="flex gap-4">
-            <n-radio value="auto" class="text-white/80">自动</n-radio>
-            <n-radio value="h264" class="text-white/80">H264</n-radio>
-            <n-radio value="h265" class="text-white/80">H265</n-radio>
-          </n-radio-group>
-          <p class="text-white/50 text-xs mt-2 text-center">
-            如果文件编码格式信息错误，可手动指定编码格式
-          </p>
-        </div>
-      </div>
-
-      <!-- 加载状态 -->
-      <div
-        v-if="isLoading"
-        class="backdrop-blur-2xl bg-white/10 border border-white/15 rounded-2xl shadow-[inset_0_1px_0_rgba(255,255,255,.35),0_8px_30px_rgba(0,0,0,.35)] p-5 text-center"
-      >
-        <p class="text-white/90">正在解析视频文件...</p>
-      </div>
-
-      <!-- 错误状态 -->
-      <div
-        v-else-if="error"
-        class="backdrop-blur-2xl bg-red-500/20 border border-red-500/30 rounded-2xl shadow-[inset_0_1px_0_rgba(255,255,255,.35),0_8px_30px_rgba(0,0,0,.35)] p-5"
-      >
-        <p class="text-red-300">解析失败: {{ error.message }}</p>
-      </div>
-
+    <!-- 浮动元素：统计信息 - 右上角 -->
+    <div class="fixed top-20 right-4 z-40 flex flex-col gap-4 w-[380px] max-w-[calc(100vw-2rem)] max-h-[calc(100vh-6rem)] overflow-y-auto">
       <!-- 统计信息（默认隐藏，可展开） -->
       <div v-if="stats" class="backdrop-blur-2xl bg-white/10 border border-white/15 rounded-2xl shadow-[inset_0_1px_0_rgba(255,255,255,.35),0_8px_30px_rgba(0,0,0,.35)] overflow-hidden">
         <!-- 展开/收起按钮 -->
